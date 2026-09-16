@@ -5,11 +5,17 @@
 # against a real git repository without committing anything into this tree.
 #
 # Expected content after a scan (sorted, POSIX):
+#   README.md
 #   api/Orders.cs
 #   api/OrdersApi.cs
 #   api/Registry.Part1.cs
 #   api/Registry.Part2.cs
+#   api/Startup.cs
 #   ui/orders.ts
+#
+# The C# files also feed the analyzer unit tests (spine step 3): Startup.cs
+# carries the explicit DI registration that must produce a
+# binds_implementation edge and the opaque factory that must NOT.
 #
 # Excluded on purpose:
 #   obj/  bin/  node_modules/  (dirs)   .DS_Store (file)

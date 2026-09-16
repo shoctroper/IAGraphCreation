@@ -18,6 +18,7 @@ const EXPECTED_FILES = [
   "api/OrdersApi.cs",
   "api/Registry.Part1.cs",
   "api/Registry.Part2.cs",
+  "api/Startup.cs",
   "ui/orders.ts",
 ];
 

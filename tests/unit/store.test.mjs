@@ -487,7 +487,7 @@ describe("Workspace", () => {
     }
   });
 
-  it("build() ingiere nodo repository + file y edges contains con evidencia", async () => {
+  it("build() ingiere repository + file + el analizador C#, todo con evidencia", async () => {
     const ws = createWorkspace(repo, { storePath: ":memory:" });
     try {
       await ws.addRepo({ path: repo, role: "api" });
@@ -495,13 +495,19 @@ describe("Workspace", () => {
       expect(report.nodeCount).toBeGreaterThan(0);
       expect(report.edgeCount).toBeGreaterThan(0);
       const contains = await ws.store.getEdges({ kind: "contains" });
-      expect(contains.length).toBe(report.edgeCount);
+      expect(contains.length).toBeGreaterThan(0);
+      expect(contains.length).toBeLessThanOrEqual(report.edgeCount);
       for (const e of contains) {
         expect(e.evidence.file).toBeTruthy();
         expect(Number.isInteger(e.evidence.lineStart)).toBe(true);
       }
       const files = await ws.store.findNodes({ kind: "file" });
       expect(files.length).toBeGreaterThan(0);
+      // the C# analyzer runs during build: classes, implements edges, evidence
+      const classes = await ws.store.findNodes({ kind: "class" });
+      expect(classes.map((n) => n.name)).toContain("OrderService");
+      const implements_ = await ws.store.getEdges({ kind: "implements" });
+      expect(implements_.length).toBeGreaterThan(0);
     } finally {
       ws.store.close();
     }

@@ -1,13 +1,13 @@
 // Workspace: the composition root that owns a GraphStore and the repositories
 // that feed it (docs/API.md, spine step 2).
 //
-// The build in this slice is deliberately the MINIMAL file-level ingest: a
-// `repository` node plus one `file` node per scanned source file, linked by
-// `contains` edges. Every edge carries evidence {file, lineStart}, every node is
-// tagged firstSeenRev/lastSeenRev and every edge observedInRev/firstSeenRev/
-// lastSeenRev, with the revision resolved by the scanner slice. This is what the
-// acceptance suite needs to construct a workspace at all; analyzers, resolve and
-// incremental are later spine steps that grow on this base.
+// The build runs the file-level ingest AND every analyzer that applies to the
+// scanned files (spine step 3): the C# analyzer turns type declarations,
+// methods, Map* endpoints and explicit DI registrations into model nodes and
+// implements/binds_implementation edges, each carrying evidence {file,
+// lineStart} (rule 1). Analyzers never invent an edge when the resolution is
+// uncertain (rule 2) and mark EXTRACTED only what is read literally in the
+// source (rule 3).
 //
 // update()/rebuild()/verify() are functional but intentionally minimal: update
 // re-scans the repositories at the current revision (keeping firstSeenRev
@@ -25,6 +25,7 @@ import {
   toPosixPath,
 } from "../model/index.mjs";
 import { scanRepository } from "../scanner/index.mjs";
+import { analyzeFiles } from "../analyzers/index.mjs";
 import { GraphStore } from "./graph-store.mjs";
 
 const FILE_EXTRACTOR = "filesystem";
@@ -76,8 +77,16 @@ export async function ingestRepo(store, { path, role }, { rev, parent } = {}) {
     }),
   );
 
-  store.upsertNodes([repoNode, ...fileNodes], scanRev);
-  store.upsertEdges(edges, scanRev);
+  // Spine step 3: run every analyzer that applies to the scanned files. The
+  // analyzer-produced nodes/edges already carry evidence {file, lineStart} and
+  // are stamped with the scan revision, so they satisfy the same invariants as
+  // the file-level ingest.
+  const analysis = await analyzeFiles({ files: scan.files, root: scan.root, rev: scanRev });
+  const modelNodes = analysis.nodes;
+  const modelEdges = analysis.edges;
+
+  store.upsertNodes([repoNode, ...fileNodes, ...modelNodes], scanRev);
+  store.upsertEdges([...edges, ...modelEdges], scanRev);
   store.recordRevision(createRevision({ sha: scanRev, parent }));
 
   return { rev: scanRev, repoId, root, files: fileNodes.length };
@@ -201,6 +210,36 @@ export class Workspace {
       }
       for (const rel of scan.files) {
         if (!stored.has(rel)) report.changedFiles.push(rel);
+      }
+
+      // Analyzer-produced nodes must not linger after their file disappears:
+      // a deleted file takes its classes/interfaces/methods/endpoints with it
+      // (acceptance E3). A renamed file is the exception — the symbol keeps its
+      // identity, so its evidence is remapped instead of dropped (E4/E5).
+      const renames = new Map(
+        detectRenames(repo.path, prevRev, newRev).map((r) => [r.from, r.to]),
+      );
+      for (const node of this._store.findNodes({})) {
+        if (node.kind === "repository" || node.kind === "file") continue;
+        const file = node.file;
+        if (!file || scanned.has(file)) continue;
+        const movedTo = renames.get(file);
+        if (movedTo) {
+          this._store.upsertNodes(
+            [
+              {
+                ...node,
+                file: movedTo,
+                evidence: (node.evidence ?? []).map((ev) =>
+                  ev.file === file ? { ...ev, file: movedTo } : ev,
+                ),
+              },
+            ],
+            newRev,
+          );
+        } else {
+          this._store.removeNode(node.id);
+        }
       }
 
       await ingestRepo(this._store, { path: repo.path, role: repo.role }, { rev: newRev, parent: prevRev });
