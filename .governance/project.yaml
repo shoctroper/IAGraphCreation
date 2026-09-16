@@ -27,6 +27,9 @@ scope:
   - .governance
   - LICENSE
   - docs/API.md
+  # An agent must not be able to widen its own tool permissions.
+  - opencode.json
+  - docs/reference
   ignore:
   - node_modules
   - .iagraph
