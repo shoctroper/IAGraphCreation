@@ -281,6 +281,21 @@ export class GraphStore {
     return node;
   }
 
+  /**
+   * Remove a single node WITHOUT cascading to the edges that referenced it.
+   *
+   * The incremental engine reconciles edges by their own evidence location, so
+   * a dangling reference (an `imports` edge to a deleted file, which a fresh
+   * rebuild keeps because the import statement still exists) must survive the
+   * node removal. `removeNode` would delete it; this precise variant does not.
+   */
+  removeNodeOnly(id) {
+    const node = this.getNode(id);
+    if (!node) return null;
+    this._db.prepare("DELETE FROM nodes WHERE id = ?").run(id);
+    return node;
+  }
+
   /** Remove a single edge. Returns the removed edge. */
   removeEdge(id) {
     const edge = this.getEdge(id);

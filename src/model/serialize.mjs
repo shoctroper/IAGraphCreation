@@ -25,6 +25,16 @@ export const OPERATIONAL_KEYS = Object.freeze(
     "durationMs",
     "elapsedMs",
     "duration",
+    // Revision stamps are operational, not semantic (rule 5/7): the SAME graph
+    // built incrementally keeps `firstSeenRev` history while a fresh rebuild
+    // stamps everything at the current revision. F1/F3/F4/F5 prove
+    // `incremental ≡ rebuild` through the canonical hash, so the hash must
+    // depend on semantic content only — never on when a node was first seen or
+    // which revision stamped it.
+    "firstSeenRev",
+    "lastSeenRev",
+    "observedInRev",
+    "rev",
   ]),
 );
 

@@ -9,13 +9,13 @@
 // uncertain (rule 2) and mark EXTRACTED only what is read literally in the
 // source (rule 3).
 //
-// update()/rebuild()/verify() are functional but intentionally minimal: update
-// re-scans the repositories at the current revision (keeping firstSeenRev
-// history) and reports an honest, degraded-to-rebuild style report.
+// update()/rebuild()/verify() are the state-changing surface: update delegates
+// to the git-diff-driven incremental engine (src/incremental, spine step 6) so a
+// commit re-analyzes exactly the affected region and recomputes its edges;
+// rebuild() reconstructs from source and verify() proves incremental ≡ rebuild.
 
 import { basename, join, resolve } from "node:path";
 import { stat } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
 import {
   createNode,
   createEdge,
@@ -27,10 +27,8 @@ import {
 import { scanRepository } from "../scanner/index.mjs";
 import { analyzeFiles } from "../analyzers/index.mjs";
 import { resolveBindingRules } from "../resolve/index.mjs";
+import { updateRepository, FILE_EXTRACTOR, FILE_EXTRACTOR_VERSION } from "../incremental/index.mjs";
 import { GraphStore } from "./graph-store.mjs";
-
-const FILE_EXTRACTOR = "filesystem";
-const FILE_EXTRACTOR_VERSION = "0.1.0";
 
 /**
  * Ingest one repository at its resolved revision: repository + file nodes and
@@ -101,25 +99,6 @@ export async function ingestRepo(store, { path, role }, { rev, parent } = {}) {
   return { rev: scanRev, repoId, root, files: fileNodes.length };
 }
 
-function detectRenames(repoPath, from, to) {
-  if (!from || !to || from === to) return [];
-  try {
-    const out = execFileSync(
-      "git",
-      ["-C", repoPath, "diff", "--name-status", "-M", from, to],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    );
-    const renamed = [];
-    for (const line of out.split("\n")) {
-      const m = line.match(/^R\d+\t(.+?)\t(.+?)\s*$/);
-      if (m) renamed.push({ from: m[1], to: m[2] });
-    }
-    return renamed;
-  } catch {
-    return [];
-  }
-}
-
 export class Workspace {
   constructor({ dir, storePath, store } = {}) {
     this._dir = dir;
@@ -179,82 +158,33 @@ export class Workspace {
     };
   }
 
-  /** Minimal incremental: re-scan at the current revision, drop stale files,
-   *  re-ingest, preserving firstSeenRev. Honest report, not a fake precision. */
+  /**
+   * Git-diff-driven incremental update (spine step 6). For each repository the
+   * commit range `from..to` is resolved by `git diff --name-status -M`, the
+   * affected region (changed files + callers + binding_rule scopes) is
+   * re-parsed against the full corpus index, and the store is reconciled so a
+   * commit changes exactly the affected files and recomputes their edges
+   * (E1–E8). The report declares the computed invalidation scope.
+   */
   async update({ from, to } = {}) {
     const report = {
       changedFiles: [],
       reanalyzedFiles: [],
       renamed: [],
-      invalidationReason: "filesystem ingest: re-scan of every repository",
+      invalidationReason: "",
       degradedToRebuild: false,
       invalidatedRules: [],
       revisions: [],
     };
     for (const repo of this._repos) {
-      const scan = await scanRepository({ path: repo.path, rev: to });
-      if (!scan.rev) {
-        throw new Error(`update: no git revision resolvable for ${repo.path}`);
-      }
-      const newRev = scan.rev;
-      const prevRev = from ?? (await this._store.lastRevision());
-      const repoId = makeNodeId("repository", toPosixPath(scan.root));
-
-      const scanned = new Set(scan.files);
-      const stored = new Set(
-        this._store
-          .getEdges({ kind: "contains", src: repoId })
-          .map((e) => {
-            const n = this._store.getNode(e.dst);
-            return n && n.file ? n.file : null;
-          })
-          .filter(Boolean),
-      );
-
-      for (const rel of stored) {
-        if (!scanned.has(rel)) {
-          this._store.removeNode(makeNodeId("file", rel));
-          report.changedFiles.push(rel);
-        }
-      }
-      for (const rel of scan.files) {
-        if (!stored.has(rel)) report.changedFiles.push(rel);
-      }
-
-      // Analyzer-produced nodes must not linger after their file disappears:
-      // a deleted file takes its classes/interfaces/methods/endpoints with it
-      // (acceptance E3). A renamed file is the exception — the symbol keeps its
-      // identity, so its evidence is remapped instead of dropped (E4/E5).
-      const renames = new Map(
-        detectRenames(repo.path, prevRev, newRev).map((r) => [r.from, r.to]),
-      );
-      for (const node of this._store.findNodes({})) {
-        if (node.kind === "repository" || node.kind === "file") continue;
-        const file = node.file;
-        if (!file || scanned.has(file)) continue;
-        const movedTo = renames.get(file);
-        if (movedTo) {
-          this._store.upsertNodes(
-            [
-              {
-                ...node,
-                file: movedTo,
-                evidence: (node.evidence ?? []).map((ev) =>
-                  ev.file === file ? { ...ev, file: movedTo } : ev,
-                ),
-              },
-            ],
-            newRev,
-          );
-        } else {
-          this._store.removeNode(node.id);
-        }
-      }
-
-      await ingestRepo(this._store, { path: repo.path, role: repo.role }, { rev: newRev, parent: prevRev });
-      report.reanalyzedFiles.push(...scan.files);
-      report.revisions.push(newRev);
-      report.renamed.push(...detectRenames(repo.path, prevRev, newRev));
+      const per = await updateRepository(this._store, repo, { from, to });
+      report.changedFiles.push(...per.changedFiles);
+      report.reanalyzedFiles.push(...per.reanalyzedFiles);
+      report.renamed.push(...per.renamed);
+      report.invalidationReason = per.invalidationReason;
+      report.degradedToRebuild = report.degradedToRebuild || per.degradedToRebuild;
+      report.invalidatedRules.push(...per.invalidatedRules);
+      report.revisions.push(...per.revisions);
     }
     report.changedFiles = [...new Set(report.changedFiles)].sort();
     report.reanalyzedFiles = [...new Set(report.reanalyzedFiles)].sort();

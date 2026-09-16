@@ -27,3 +27,15 @@ export { search, explain, path, impact } from "./query/index.mjs";
 // their scope and cite the literal scan call as evidence.
 export * as resolve from "./resolve/index.mjs";
 export { resolveBindingRules } from "./resolve/index.mjs";
+
+// Incremental slice (spine step 6): the git-diff-driven engine that turns a
+// commit into a precise mutation of the graph (affected region -> re-analysis
+// -> store reconcile) and reports the computed invalidation scope.
+export * as incremental from "./incremental/index.mjs";
+export {
+  gitDiff,
+  updateRepository,
+  computeRegion,
+  buildTypeIndexFromStore,
+  applyRegion,
+} from "./incremental/index.mjs";
