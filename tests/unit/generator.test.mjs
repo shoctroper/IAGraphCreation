@@ -39,7 +39,19 @@ async function analyzeSources(sources, analyzer, rev = REV) {
 describe("analizador de configuración del generador · extracción directa", () => {
   it("un nswag.json produce UN edge generated_from del output a la spec", async () => {
     const out = await analyzeSources({ "nswag.json": CONFIG }, analyzeGenerators);
-    expect(out.nodes).toEqual([]);
+    expect(out.nodes).toEqual([
+      expect.objectContaining({
+        id: "client:ui/api-client.ts",
+        kind: "client",
+        name: "ui/api-client.ts",
+        qualifiedName: "ui/api-client.ts",
+        file: "nswag.json",
+        lineStart: 1,
+        firstSeenRev: REV,
+        lastSeenRev: REV,
+        evidence: [{ file: "nswag.json", lineStart: 1, rev: REV }],
+      }),
+    ]);
     const g = out.edges.filter((e) => e.kind === "generated_from");
     expect(g).toHaveLength(1);
     expect(g[0].src).toBe("client:ui/api-client.ts");

@@ -16,15 +16,17 @@
 //   }
 //
 // Every `codeGenerators.*.output` is the generated client, and the whole
-// document is generated FROM `documentGenerator.fromDocument.url`. Each pair
-// yields ONE `generated_from` edge from the generated output to the source
-// spec, whose evidence cites the config file at line 1 — the values are read
+// document is generated FROM `documentGenerator.fromDocument.url`. Each output
+// yields ONE client node (kind: "client", named after the literal output value,
+// evidence citing the config file at line 1) plus ONE `generated_from` edge
+// from that client to the source spec — so a generated client that is absent
+// from the tree still exists as a node (acceptance J3). The values are read
 // literally from the config (rule 3: EXTRACTED), nothing is resolved from
 // context, and a config without a source url or without any output produces
 // nothing (rule 2).
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createEdge, makeNodeId, toPosixPath } from "../../model/index.mjs";
+import { createEdge, createNode, makeNodeId, toPosixPath } from "../../model/index.mjs";
 
 export const EXTRACTOR = "generator-config";
 export const EXTRACTOR_VERSION = "0.1.0";
@@ -55,9 +57,10 @@ function outputsOf(doc) {
 /**
  * Analyze the generator configs among the given files: every JSON file whose
  * root declares a `documentGenerator.fromDocument.url` and at least one
- * `codeGenerators.*.output` yields one `generated_from` edge per output, from
- * the generated output file to the source spec, with evidence citing the config
- * file at line 1.
+ * `codeGenerators.*.output` yields one client node per output (named literally
+ * from the output, evidenced by the config file at line 1) and one
+ * `generated_from` edge per output, from the generated output file to the
+ * source spec, with evidence citing the config file at line 1.
  *
  * @param {{ files: string[], root: string, rev: string }} opts `files` are
  *   repo-relative POSIX paths, `root` is the repository root, `rev` the
@@ -75,6 +78,7 @@ export async function analyzeGenerators({ files, root, rev } = {}) {
     return { nodes: [], edges: [], observations: [] };
   }
 
+  const nodes = [];
   const edges = [];
   for (const file of files) {
     let source;
@@ -99,6 +103,16 @@ export async function analyzeGenerators({ files, root, rev } = {}) {
     const spec = toPosixPath(from.url);
     const dst = makeNodeId("file", spec);
     for (const { output } of outputs) {
+      nodes.push(
+        createNode({
+          kind: "client",
+          name: output,
+          qualifiedName: output,
+          file,
+          lineStart: 1,
+          rev,
+        }),
+      );
       const client = toPosixPath(output);
       const src = makeNodeId("client", client);
       edges.push(
@@ -116,5 +130,5 @@ export async function analyzeGenerators({ files, root, rev } = {}) {
     }
   }
 
-  return { nodes: [], edges, observations: [] };
+  return { nodes, edges, observations: [] };
 }
