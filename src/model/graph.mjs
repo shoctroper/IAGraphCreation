@@ -66,7 +66,13 @@ export class Graph {
   upsertEdge(edge, rev = edge.lastSeenRev ?? edge.observedInRev) {
     const existing = this._edges.get(edge.id);
     const next = existing
-      ? { ...existing, ...edge, lastSeenRev: rev ?? existing.lastSeenRev }
+      ? {
+          ...existing,
+          ...edge,
+          // Rule 5: re-observing an edge must never rewrite its birth.
+          firstSeenRev: existing.firstSeenRev,
+          lastSeenRev: rev ?? existing.lastSeenRev,
+        }
       : { ...edge, lastSeenRev: rev ?? edge.lastSeenRev };
     assertValidEdge(next);
     this._edges.set(next.id, next);
