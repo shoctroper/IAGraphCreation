@@ -2,12 +2,12 @@
 // gives Workspace a single hook to run every applicable analyzer over a scan.
 import { analyzeCSharp } from "./csharp/index.mjs";
 import { analyzeTypeScript } from "./typescript/index.mjs";
-import { analyzeContracts } from "./contracts/index.mjs";
 import {
+  analyzeContracts,
   analyzeGenerators,
   GENERATOR_EXTRACTOR,
   GENERATOR_EXTRACTOR_VERSION,
-} from "./contracts/generator.mjs";
+} from "./contracts/index.mjs";
 
 export { analyzeGenerators, GENERATOR_EXTRACTOR, GENERATOR_EXTRACTOR_VERSION };
 
