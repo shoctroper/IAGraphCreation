@@ -26,7 +26,7 @@ export function analyzerForFile(file) {
  * Run every analyzer that applies to the given files.
  *
  * @param {{ files: string[], root: string, rev: string }} opts
- * @returns {Promise<{ nodes: object[], edges: object[] }>}
+ * @returns {Promise<{ nodes: object[], edges: object[], observations: object[] }>}
  */
 export async function analyzeFiles({ files, root, rev } = {}) {
   const byAnalyzer = new Map();
@@ -38,10 +38,12 @@ export async function analyzeFiles({ files, root, rev } = {}) {
   }
   const nodes = [];
   const edges = [];
+  const observations = [];
   for (const [analyzer, analyzerFiles] of byAnalyzer) {
     const out = await analyzer.analyze({ files: analyzerFiles, root, rev });
     nodes.push(...out.nodes);
     edges.push(...out.edges);
+    observations.push(...(out.observations ?? []));
   }
-  return { nodes, edges };
+  return { nodes, edges, observations };
 }

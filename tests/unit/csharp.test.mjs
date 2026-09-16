@@ -189,7 +189,7 @@ public static class Startup
 describe("registro de analizadores", () => {
   it("asigna .cs al analizador C# y nada más", () => {
     expect(analyzerForFile("api/Orders.cs").name).toBe("csharp");
-    expect(analyzerForFile("ui/orders.ts")).toBeNull();
+    expect(analyzerForFile("ui/orders.ts").name).toBe("typescript");
     expect(analyzerForFile("api/Orders.CS")).not.toBeNull();
   });
 

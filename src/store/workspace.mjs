@@ -26,6 +26,7 @@ import {
 } from "../model/index.mjs";
 import { scanRepository } from "../scanner/index.mjs";
 import { analyzeFiles } from "../analyzers/index.mjs";
+import { resolveBindingRules } from "../resolve/index.mjs";
 import { GraphStore } from "./graph-store.mjs";
 
 const FILE_EXTRACTOR = "filesystem";
@@ -85,8 +86,16 @@ export async function ingestRepo(store, { path, role }, { rev, parent } = {}) {
   const modelNodes = analysis.nodes;
   const modelEdges = analysis.edges;
 
-  store.upsertNodes([repoNode, ...fileNodes, ...modelNodes], scanRev);
-  store.upsertEdges([...edges, ...modelEdges], scanRev);
+  // Spine step 4: the resolve pass derives rules (and, later, INFERRED edges)
+  // from the observations the analyzers surfaced. binding_rule nodes carry
+  // evidence citing the literal scan call, so they share the invariants above.
+  const resolution = resolveBindingRules({
+    observations: analysis.observations ?? [],
+    rev: scanRev,
+  });
+
+  store.upsertNodes([repoNode, ...fileNodes, ...modelNodes, ...resolution.nodes], scanRev);
+  store.upsertEdges([...edges, ...modelEdges, ...resolution.edges], scanRev);
   store.recordRevision(createRevision({ sha: scanRev, parent }));
 
   return { rev: scanRev, repoId, root, files: fileNodes.length };

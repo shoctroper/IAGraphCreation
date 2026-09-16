@@ -21,3 +21,9 @@ export { createWorkspace, Workspace, GraphStore } from "./store/index.mjs";
 // Query slice (spine step 7): search, explain, path and impact, each returning
 // evidence traceable to the store (docs/API.md "Consulta").
 export { search, explain, path, impact } from "./query/index.mjs";
+
+// Resolve slice (spine step 4): derives rules from the observations the
+// analyzers surface. binding_rule nodes carry the scanned assembly/project as
+// their scope and cite the literal scan call as evidence.
+export * as resolve from "./resolve/index.mjs";
+export { resolveBindingRules } from "./resolve/index.mjs";

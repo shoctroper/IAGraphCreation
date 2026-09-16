@@ -33,6 +33,19 @@ export const EMPTY_TYPE_INDEX = Object.freeze({
 
 const MAP_METHODS = new Set(["MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch"]);
 const DI_METHODS = new Set(["AddSingleton", "AddScoped", "AddTransient"]);
+// Assembly-scanning DI registrations (docs/API.md "binding_rule"): a call that
+// declares a rule over a whole assembly/project rather than a single pair of
+// types. The scanned assembly is resolved from the literal type reference
+// (typeof(X).Assembly or X<T>), never guessed.
+const SCAN_METHODS = new Set([
+  "AddHandlersFromAssembly",
+  "AddHandlersFromAssemblyContaining",
+  "RegisterServicesFromAssembly",
+  "RegisterServicesFromAssemblyContaining",
+  "AddValidatorsFromAssembly",
+  "AddValidatorsFromAssemblyContaining",
+  "AddMaps",
+]);
 
 const QUERY = `
   (class_declaration
@@ -141,6 +154,36 @@ function findDescendant(node, type) {
   return null;
 }
 
+/**
+ * The type name a scan registration scans, read literally from the source:
+ * either the `typeof(X)` reference of `AddX(typeof(X).Assembly)` or the
+ * generic argument of `AddXContaining<T>()`. Returns null when there is no
+ * readable type reference (e.g. `RegisterServicesFromAssembly(Assembly.X())`):
+ * the scanned assembly cannot be resolved, so no observation is emitted.
+ */
+function scanTypeName(argsNode, targsNode, source) {
+  if (targsNode) {
+    const first = targsNode.namedChildren[0];
+    return first ? simpleName(slice(first, source)) : null;
+  }
+  if (!argsNode) return null;
+  const typeOf = findDescendant(argsNode, "typeof_expression");
+  if (!typeOf) return null;
+  const typeChild = typeOf.namedChildren[0];
+  return typeChild ? simpleName(slice(typeChild, source)) : null;
+}
+
+/**
+ * The project domain (assembly) that declares a type: the namespace-qualified
+ * name minus its last segment. `class:Shop.Api.Startup` -> `Shop.Api`.
+ */
+function assemblyOfTypeId(id) {
+  const qname = String(id).replace(/^[^:]+:/, "");
+  const parts = qname.split(".");
+  parts.pop();
+  return parts.length > 0 ? parts.join(".") : null;
+}
+
 /** The route literal of a Map* call: the first argument, when it is a string. */
 function firstRouteArgument(argsNode, src) {
   const first = argsNode.firstNamedChild;
@@ -163,7 +206,7 @@ function addToIndex(map, name, id) {
  * Create an extractor bound to a loaded C# grammar.
  *
  * @returns {{ collectTypes: ({source: string}) => TypeIndex,
- *            extract: ({source, file, rev, index}) => {nodes, edges} }}
+ *            extract: ({source, file, rev, index}) => {nodes, edges, observations} }}
  */
 export function createCSharpExtractor(language, parser) {
   const query = new Query(language, QUERY);
@@ -199,8 +242,36 @@ export function createCSharpExtractor(language, parser) {
     const tree = parse(source);
     const nodes = [];
     const edges = [];
+    const observations = [];
 
     const typeRecords = [];
+
+    // Scan registrations are surfaced as observations (call + resolved
+    // assembly): the resolve pass turns each into a binding_rule node. The
+    // assembly is only resolved when the referenced type is declared exactly
+    // once in the corpus (rule 2); otherwise there is no observation at all.
+    const scanObservation = ({ callNode, method, argsNode, targsNode }) => {
+      const typeName = scanTypeName(argsNode, targsNode, source);
+      if (!typeName) return null;
+      const ids = [];
+      for (const key of ["classes", "interfaces"]) {
+        const set = index[key].get(typeName);
+        if (set) ids.push(...set);
+      }
+      if (ids.length !== 1) return null;
+      const assembly = assemblyOfTypeId(ids[0]);
+      if (!assembly) return null;
+      return {
+        kind: "scan_registration",
+        method,
+        call: slice(callNode, source),
+        assembly,
+        typeRef: typeName,
+        file,
+        lineStart: lineOf(callNode),
+        rev,
+      };
+    };
 
     for (const m of query.matches(tree.rootNode)) {
       const cap = captures(m);
@@ -255,6 +326,15 @@ export function createCSharpExtractor(language, parser) {
       const call = cap.get("endpoint.call");
       if (call) {
         const methodName = slice(cap.get("endpoint.name"), source);
+        if (SCAN_METHODS.has(methodName)) {
+          const obs = scanObservation({
+            callNode: call,
+            method: methodName,
+            argsNode: cap.get("endpoint.args"),
+          });
+          if (obs) observations.push(obs);
+          continue;
+        }
         if (MAP_METHODS.has(methodName)) {
           const route = firstRouteArgument(cap.get("endpoint.args"), source);
           if (route !== null) {
@@ -280,6 +360,16 @@ export function createCSharpExtractor(language, parser) {
       const dcall = cap.get("di.call");
       if (dcall) {
         const diName = slice(cap.get("di.name"), source);
+        if (SCAN_METHODS.has(diName)) {
+          const obs = scanObservation({
+            callNode: dcall,
+            method: diName,
+            argsNode: cap.get("di.args"),
+            targsNode: cap.get("di.targs"),
+          });
+          if (obs) observations.push(obs);
+          continue;
+        }
         if (DI_METHODS.has(diName)) {
           const targs = cap.get("di.targs");
           const dargs = cap.get("di.args");
@@ -340,7 +430,7 @@ export function createCSharpExtractor(language, parser) {
       }
     }
 
-    return { nodes, edges };
+    return { nodes, edges, observations };
   }
 
   return { collectTypes, extract };

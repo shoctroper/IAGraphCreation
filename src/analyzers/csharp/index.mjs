@@ -61,7 +61,7 @@ function mergeTypeIndex(target, types) {
  * @param {{ files: string[], root: string, rev: string }} opts `files` are
  *   repo-relative POSIX paths, `root` is the repository root, `rev` the
  *   revision the analysis is anchored to.
- * @returns {Promise<{ nodes: object[], edges: object[] }>}
+ * @returns {Promise<{ nodes: object[], edges: object[], observations: object[] }>}
  */
 export async function analyzeCSharp({ files, root, rev } = {}) {
   if (typeof rev !== "string" || rev.length === 0) {
@@ -89,13 +89,15 @@ export async function analyzeCSharp({ files, root, rev } = {}) {
   // Pass 2: per-file extraction against the full index.
   const nodes = [];
   const edges = [];
+  const observations = [];
   for (const [file, source] of sources) {
     const out = extractor.extract({ source, file, rev, index });
     nodes.push(...out.nodes);
     edges.push(...out.edges);
+    observations.push(...(out.observations ?? []));
   }
 
-  return { nodes: mergeNodes(nodes), edges };
+  return { nodes: mergeNodes(nodes), edges, observations };
 }
 
 /**
