@@ -154,6 +154,42 @@ public static class Startup
     });
     expect(nodes).toEqual([]);
   });
+
+  it("dos llamadas al mismo assembly:method producen UNA regla con la evidencia de ambos sitios", () => {
+    const { nodes } = resolveBindingRules({
+      observations: [
+        {
+          kind: "scan_registration",
+          method: "AddHandlersFromAssembly",
+          call: "services.AddHandlersFromAssembly(typeof(Startup).Assembly)",
+          assembly: "Shop.Api",
+          file: "api/Startup.cs",
+          lineStart: 10,
+          rev: REV,
+        },
+        {
+          kind: "scan_registration",
+          method: "AddHandlersFromAssembly",
+          call: "services.AddHandlersFromAssembly(typeof(Startup).Assembly)",
+          assembly: "Shop.Api",
+          file: "api/Module.cs",
+          lineStart: 22,
+          rev: REV,
+        },
+      ],
+      rev: REV,
+    });
+    expect(nodes).toHaveLength(1);
+    const [rule] = nodes;
+    expect(rule.name).toBe("AddHandlersFromAssembly");
+    expect(rule.scope).toBe("Shop.Api");
+    expect(rule.evidence).toEqual([
+      { file: "api/Startup.cs", lineStart: 10, rev: REV },
+      { file: "api/Module.cs", lineStart: 22, rev: REV },
+    ]);
+    expect(rule.file).toBe("api/Startup.cs");
+    expect(rule.lineStart).toBe(10);
+  });
 });
 
 describe("Workspace.build integra el resolver (B9)", () => {

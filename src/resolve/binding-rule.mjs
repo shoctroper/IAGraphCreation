@@ -23,6 +23,34 @@ export const RESOLVER = "resolve";
 export const RESOLVER_VERSION = "0.1.0";
 
 /**
+ * Deduplicate rule nodes by id, keeping the evidence of every literal call
+ * site. Two scan registrations that resolve to the same `assembly:method`
+ * (e.g. `AddHandlersFromAssembly` called for the same assembly from two files)
+ * are ONE rule, exactly as a partial class is ONE node (docs/API.md rule 6;
+ * acceptance B6). Like `mergeNodes`, the primary location is the first
+ * fragment's, and only the evidence list grows.
+ */
+function mergeRuleNodes(nodes) {
+  const byId = new Map();
+  for (const node of nodes) {
+    const existing = byId.get(node.id);
+    if (!existing) {
+      byId.set(node.id, { ...node, evidence: [...(node.evidence ?? [])] });
+      continue;
+    }
+    const seen = new Set((existing.evidence ?? []).map((e) => `${e.file}:${e.lineStart}`));
+    for (const ev of node.evidence ?? []) {
+      const key = `${ev.file}:${ev.lineStart}`;
+      if (!seen.has(key)) {
+        existing.evidence.push(ev);
+        seen.add(key);
+      }
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
  * Derive binding_rule nodes from scan-registration observations.
  *
  * @param {{ observations: object[], rev: string }} opts `observations` are the
@@ -54,5 +82,5 @@ export function resolveBindingRules({ observations = [], rev } = {}) {
       }),
     );
   }
-  return { nodes, edges };
+  return { nodes: mergeRuleNodes(nodes), edges };
 }
