@@ -3,6 +3,13 @@
 import { analyzeCSharp } from "./csharp/index.mjs";
 import { analyzeTypeScript } from "./typescript/index.mjs";
 import { analyzeContracts } from "./contracts/index.mjs";
+import {
+  analyzeGenerators,
+  GENERATOR_EXTRACTOR,
+  GENERATOR_EXTRACTOR_VERSION,
+} from "./contracts/generator.mjs";
+
+export { analyzeGenerators, GENERATOR_EXTRACTOR, GENERATOR_EXTRACTOR_VERSION };
 
 export const ANALYZERS = Object.freeze([
   {
@@ -18,6 +25,9 @@ export const ANALYZERS = Object.freeze([
   {
     name: "contracts",
     extensions: [".json"],
+    // The contracts slice parses OpenAPI specs into endpoint nodes AND
+    // generator configs (nswag.json) into `generated_from` edges (acceptance
+    // J2); analyzeContracts invokes analyzeGenerators over the same files.
     analyze: analyzeContracts,
   },
 ]);

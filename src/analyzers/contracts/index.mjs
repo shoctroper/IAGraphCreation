@@ -6,9 +6,15 @@
 // whose root carries an `openapi` field and turns every operation into an
 // endpoint node whose evidence {file, lineStart, rev} cites the spec file.
 //
+// A committed generator config (nswag.json) is contract-first evidence of the
+// same kind (acceptance J2): it declares the source spec and the generated
+// client outputs, each pair yielding one `generated_from` edge (see
+// ./generator.mjs).
+//
 // The three invariants of docs/API.md hold:
-//   1. every node carries evidence {file, lineStart} citing the spec;
-//   2. nothing is resolved from context: an operation is read literally;
+//   1. every node/edge carries evidence {file, lineStart} citing the source;
+//   2. nothing is resolved from context: an operation or a generator mapping is
+//      read literally;
 //   3. only real HTTP operation keys become endpoints — "parameters", "servers"
 //      or any other path-item key is never invented as an endpoint, and a JSON
 //      file without an `openapi` root field produces nothing (rule 3).
@@ -18,9 +24,16 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createNode } from "../../model/index.mjs";
+import {
+  analyzeGenerators,
+  EXTRACTOR as GENERATOR_EXTRACTOR,
+  EXTRACTOR_VERSION as GENERATOR_EXTRACTOR_VERSION,
+} from "./generator.mjs";
 
 export const EXTRACTOR = "contracts";
 export const EXTRACTOR_VERSION = "0.1.0";
+
+export { analyzeGenerators, GENERATOR_EXTRACTOR, GENERATOR_EXTRACTOR_VERSION };
 
 // The HTTP operation keys OpenAPI allows at the path-item level. Anything else
 // is structural (parameters, servers, $ref) and must not be treated as an
@@ -39,8 +52,12 @@ function isOpenApiSpec(doc) {
 }
 
 /**
- * Analyze the OpenAPI contracts among the given files: every JSON file whose
- * root has an `openapi` field yields one endpoint node per `paths` operation.
+ * Analyze the contract-first evidence among the given files: every JSON file
+ * whose root has an `openapi` field yields one endpoint node per `paths`
+ * operation, and every JSON file that declares a generator config (a
+ * `documentGenerator.fromDocument.url` with at least one `codeGenerators.*.
+ * output`) yields `generated_from` edges from its generated outputs to the
+ * source spec (acceptance J2).
  *
  * @param {{ files: string[], root: string, rev: string }} opts `files` are
  *   repo-relative POSIX paths, `root` is the repository root, `rev` the
@@ -59,6 +76,7 @@ export async function analyzeContracts({ files, root, rev } = {}) {
   }
 
   const nodes = [];
+  const edges = [];
   for (const file of files) {
     let source;
     try {
@@ -98,5 +116,10 @@ export async function analyzeContracts({ files, root, rev } = {}) {
     }
   }
 
-  return { nodes, edges: [], observations: [] };
+  // Generator configs are also contract-first evidence: a committed nswag.json
+  // declares the source spec and the generated client outputs (acceptance J2).
+  const generated = await analyzeGenerators({ files, root, rev });
+  edges.push(...generated.edges);
+
+  return { nodes, edges, observations: [] };
 }
