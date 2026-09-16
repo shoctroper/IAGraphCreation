@@ -39,3 +39,10 @@ export {
   buildTypeIndexFromStore,
   applyRegion,
 } from "./incremental/index.mjs";
+
+// Viewer slice (spine step 8): compiles the graph into ONE standalone HTML file
+// with the data embedded as JSON, no network at runtime, openable from file://
+// (docs/API.md "Visor"). It reads nodes and edges from the same store the AI
+// context derives from (rule 4) and implements SEARCH, FILTER, FOCUS, EXPAND,
+// COLLAPSE, UPSTREAM, DOWNSTREAM and DETAILS.
+export { renderViewer } from "./viewer/index.mjs";
