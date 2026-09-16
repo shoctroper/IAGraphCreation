@@ -56,6 +56,28 @@ describe("A · modelo canónico", () => {
     expect(b).toEqual(a);
   });
 
+  it("A7 · el hash canónico NO depende de la ruta absoluta del disco", async () => {
+    // El agujero que A5 y A6 no ven: ambos construyen desde la MISMA ruta, así
+    // que pasan aunque el id del repositorio arrastre `/Users/...`. La auditoría
+    // adversarial lo demostró con dos rutas distintas y el mismo contenido: dos
+    // hashes distintos. Eso rompe el determinismo entre máquinas y, con él, el
+    // requisito de exportar la herramienta a otra máquina — que es la razón de
+    // ser del producto, no un detalle.
+    const { createWorkspace } = await api();
+    const otro = makeC3(); // mismo contenido, ruta distinta
+    try {
+      const ws2 = await createWorkspace(otro, { storePath: ":memory:" });
+      await ws2.addRepo({ path: otro, role: "api" });
+      await ws2.build();
+      const repo = (await ws2.store.findNodes({ kind: "repository" }))[0];
+      expect(repo.qualifiedName, "el nombre cualificado no puede llevar la ruta absoluta")
+        .not.toContain(otro);
+      expect(await ws2.canonicalHash()).toBe(await ws.canonicalHash());
+    } finally {
+      dropC3(otro);
+    }
+  });
+
   it("A6 · el hash canónico ignora la metadata operacional", async () => {
     const h1 = await ws.canonicalHash();
     await new Promise((r) => setTimeout(r, 1100)); // el reloj avanza

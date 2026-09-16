@@ -201,6 +201,7 @@ describe("J · contract-first con cliente generado", () => {
     // Éste es el caso real de CleanArchitecture y, según su ADR-0004, de
     // lubesoft: web-api-client.ts no está commiteado. La evidencia tiene que
     // venir de la spec y del generador, no de leer un archivo que no existe.
+    mkdirSync(join(c3, "contracts"), { recursive: true });
     writeFileSync(join(c3, "contracts/shop.v1.json"), JSON.stringify({
       openapi: "3.0.0", info: { title: "Shop", version: "1" },
       paths: { "/api/orders": { get: { operationId: "listOrders", responses: { 200: { description: "ok" } } } } },

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
-const TOTAL = 62;
+const TOTAL = 63;
 const report = join(tmpdir(), `iagraph-acceptance-${process.pid}.json`);
 
 // The acceptance suite runs under its own config: the default one restricts

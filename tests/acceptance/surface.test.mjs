@@ -142,17 +142,22 @@ describe("H · integración con Copilot", () => {
 // ------------------------------------------------------- I · seguridad e IP
 describe("I · seguridad y propiedad intelectual", () => {
   it("I1 · el repo público no contiene rutas de repositorios privados", () => {
-    const grep = (pat) => {
+    // `git grep` exits 1 when it finds NOTHING, which is the success case here,
+    // and execFileSync throws on a non-zero exit. Treating that as a failure
+    // made this case fail precisely when the repository was clean.
+    const grep = (...args) => {
       try {
-        return execFileSync("git", ["grep", "-lI", "--", pat], { cwd: ROOT, encoding: "utf8" }).trim();
-      } catch { return ""; }
+        return execFileSync("git", ["grep", "-lI", ...args], { cwd: ROOT, encoding: "utf8" }).trim();
+      } catch (err) {
+        if (err.status === 1) return ""; // no match
+        throw err;
+      }
     };
-    // el corpus se configura, nunca se codifica dentro del producto
-    const enFuente = execFileSync("git", ["grep", "-lI", "-e", "lubesoft", "--", "src/"], {
-      cwd: ROOT, encoding: "utf8",
-    }).toString().trim();
-    expect(enFuente).toBe("");
-    expect(grep("ints/lubesoft")).toBe("");
+    // El corpus se configura, nunca se codifica dentro del producto.
+    // Este mismo archivo nombra el repositorio privado para poder buscarlo, así
+    // que se excluye: si no, el test se encuentra a sí mismo y falla siempre.
+    expect(grep("-e", "lubesoft", "--", "src/")).toBe("");
+    expect(grep("-e", "ints/lubesoft", "--", ".", ":!tests/acceptance")).toBe("");
   });
 
   it("I2 · no hay secretos en el árbol", () => {
@@ -213,15 +218,29 @@ describe("K · portabilidad", () => {
     try { execFileSync("docker", ["info"], { stdio: "ignore" }); } catch { docker = false; }
     if (!docker) return; // sin docker: saltar, no fingir
 
-    const salida = execFileSync("docker", [
-      "run", "--rm", "-v", `${ROOT}:/app:ro`, "-w", "/tmp/build", "node:22-alpine",
-      "sh", "-c",
-      "cp -r /app/package.json /app/src /app/vendor /tmp/build/ 2>/dev/null; " +
-      "! command -v gcc && ! command -v make && echo NO_TOOLCHAIN; " +
-      "npm install --omit=dev --ignore-scripts --silent && node -e \"import('./src/index.mjs').then(()=>console.log('IMPORT_OK'))\"",
-    ], { encoding: "utf8", timeout: 600_000 });
+    // The files go in through a tar on stdin rather than a bind mount: this
+    // repository lives on an external volume that Docker Desktop does not share,
+    // so `-v` silently mounted an EMPTY /app and the case failed for a reason
+    // that had nothing to do with portability. Piping is also the more honest
+    // test — it proves the published files install and import, with no host
+    // path involved at all.
+    const tar = execFileSync("tar", ["-cf", "-", "package.json", "src", "vendor"],
+                             { cwd: ROOT, maxBuffer: 256 * 1024 * 1024 });
 
-    expect(salida).toContain("NO_TOOLCHAIN");
+    const script = [
+      "set -e",
+      "tar xf -",
+      "if command -v gcc || command -v make || command -v python3; then echo HAS_TOOLCHAIN; else echo NO_TOOLCHAIN; fi",
+      "npm install --omit=dev --ignore-scripts --no-audit --no-fund --silent",
+      "node -e \"import('./src/index.mjs').then(()=>console.log('IMPORT_OK'))\"",
+    ].join("\n");
+
+    const salida = execFileSync("docker", [
+      "run", "--rm", "-i", "-w", "/build", "node:22-alpine", "sh", "-c", script,
+    ], { encoding: "utf8", input: tar, timeout: 600_000, maxBuffer: 64 * 1024 * 1024 });
+
+    expect(salida, "the image must have no C toolchain, or this proves nothing")
+      .toContain("NO_TOOLCHAIN");
     expect(salida).toContain("IMPORT_OK");
   }, 900_000);
 });
