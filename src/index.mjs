@@ -46,3 +46,16 @@ export {
 // context derives from (rule 4) and implements SEARCH, FILTER, FOCUS, EXPAND,
 // COLLAPSE, UPSTREAM, DOWNSTREAM and DETAILS.
 export { renderViewer } from "./viewer/index.mjs";
+
+// Copilot slice (spine step 9): renders the revision-aware graph into a compact
+// context for Copilot — one global `.github/copilot-instructions.md` plus one
+// instruction file per route declaring its `applyTo` — and serves the same
+// graph as a minimal MCP server (docs/API.md "Copilot"). Both derive from the
+// SAME SQLite store (rule 4): no node or edge is invented, and every edge
+// carries its evidence {file, lineStart} (rules 1-3).
+export {
+  generateCopilotContext,
+  renderGraphContext,
+  renderRouteContext,
+} from "./copilot/index.mjs";
+export { startMcpServer } from "./copilot/index.mjs";
