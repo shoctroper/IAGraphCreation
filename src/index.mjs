@@ -17,3 +17,7 @@ export { scanRepository, listSourceFiles, resolveRevision } from "./scanner/inde
 // Store slice (spine step 2): createWorkspace returns the Workspace scaffold
 // with its SQLite-backed GraphStore and the minimal file-level ingest build.
 export { createWorkspace, Workspace, GraphStore } from "./store/index.mjs";
+
+// Query slice (spine step 7): search, explain, path and impact, each returning
+// evidence traceable to the store (docs/API.md "Consulta").
+export { search, explain, path, impact } from "./query/index.mjs";
