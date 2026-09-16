@@ -149,3 +149,75 @@ describe("orden de nodos y edges en el canon (contrato A5/A6)", () => {
     );
   });
 });
+
+describe("independencia de la ruta absoluta (A7)", () => {
+  const rootA = "/var/folders/work/machine/iagraph-c3-aaa111";
+  const rootB = "/home/other/checkout/iagraph-c3-bbb222";
+
+  function repoGraph(root) {
+    const g = new Graph({ rev: REV });
+    const repo = createNode({
+      kind: "repository",
+      name: root.split("/").pop(),
+      qualifiedName: root,
+      rev: REV,
+      metadata: { role: "api" },
+    });
+    g.upsertNode(repo);
+    const file = createNode({
+      kind: "file",
+      name: "Orders.cs",
+      qualifiedName: "api/Orders.cs",
+      file: "api/Orders.cs",
+      lineStart: 1,
+      rev: REV,
+    });
+    g.upsertNode(file);
+    g.upsertEdge(createEdge({
+      src: repo.id,
+      dst: file.id,
+      kind: "contains",
+      nature: "EXTRACTED",
+      extractor: "filesystem",
+      extractorVersion: "0.1.0",
+      evidence: { file: "api/Orders.cs", lineStart: 1, rev: REV },
+    }));
+    return g;
+  }
+
+  const asForm = (g) => ({ nodes: g.nodes(), edges: g.edges() });
+
+  it("dos checkouts con distinta ruta absoluta hashean igual", () => {
+    expect(repoGraph(rootA).canonicalHash()).toBe(repoGraph(rootB).canonicalHash());
+    expect(repoGraph(rootA).canonicalHash()).toMatch(sha256hex);
+  });
+
+  it("el JSON canónico es byte-idéntico entre checkouts", () => {
+    expect(graphCanonicalString(asForm(repoGraph(rootA)))).toBe(
+      graphCanonicalString(asForm(repoGraph(rootB))),
+    );
+  });
+
+  it("la ruta absoluta del disco no aparece en el canon", () => {
+    const s = graphCanonicalString(asForm(repoGraph(rootA)));
+    expect(s).not.toContain(rootA);
+    expect(s).not.toContain("iagraph-c3-aaa111");
+  });
+
+  it("el repositorio se serializa como la raíz relativa '.'", () => {
+    const form = graphCanonicalForm(asForm(repoGraph(rootA)));
+    const repo = form.nodes.find((n) => n.kind === "repository");
+    expect(repo.id).toBe("repository:.");
+    expect(repo.qualifiedName).toBe(".");
+    const contains = form.edges.find((e) => e.kind === "contains");
+    expect(contains.src).toBe("repository:.");
+    expect(contains.id).toContain("repository:.->");
+    expect(contains.id).not.toContain(rootA);
+  });
+
+  it("sigue distinguiendo contenido distinto tras relativizar", () => {
+    const a = repoGraph(rootA);
+    a.upsertNode(createNode({ kind: "class", name: "X", rev: REV }));
+    expect(a.canonicalHash()).not.toBe(repoGraph(rootB).canonicalHash());
+  });
+});
