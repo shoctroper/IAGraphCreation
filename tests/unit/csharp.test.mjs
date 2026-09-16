@@ -177,6 +177,30 @@ public static class Startup
     expect(out.edges.filter((e) => e.kind === "binds_implementation")).toEqual([]);
   });
 
+  it("un GetRequiredService dentro de la factory NO es un binding (B8, falso positivo de la sonda)", async () => {
+    // La sonda del arquitecto lee GetRequiredService<Impl>() de los argumentos
+    // y lo reporta como implementación: ese es el falso positivo deliberado que
+    // B8 prohíbe repetir. La implementación vive dentro del lambda; la llamada
+    // de un solo argumento de tipo no es un registro literal.
+    const out = await analyzeSources({
+      "api/I.cs": `namespace N;
+public interface ICustomerService { }
+public class RealCustomerService : ICustomerService { }
+`,
+      "api/Startup.cs": `using Microsoft.Extensions.DependencyInjection;
+namespace N;
+public static class Startup
+{
+    public static void C(IServiceCollection s)
+    {
+        s.AddSingleton<ICustomerService>(sp => sp.GetRequiredService<RealCustomerService>());
+    }
+}
+`,
+    });
+    expect(out.edges.filter((e) => e.kind === "binds_implementation")).toEqual([]);
+  });
+
   it("createCSharpAnalyzer expone collectTypes/extract con un solo runtime", async () => {
     const analyzer = await createCSharpAnalyzer();
     const { interfaces } = analyzer.collectTypes({
