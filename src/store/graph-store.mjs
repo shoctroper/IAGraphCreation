@@ -123,7 +123,11 @@ function rowToEdge(row) {
     lastSeenRev: row.last_seen_rev,
   };
   if (row.rule_id !== null) edge.ruleId = row.rule_id;
-  if (row.metadata !== null) edge.metadata = JSON.parse(row.metadata);
+  if (row.metadata !== null) {
+    edge.metadata = JSON.parse(row.metadata);
+    if (edge.metadata.route !== undefined) edge.route = edge.metadata.route;
+    if (edge.metadata.method !== undefined) edge.method = edge.metadata.method;
+  }
   return edge;
 }
 
