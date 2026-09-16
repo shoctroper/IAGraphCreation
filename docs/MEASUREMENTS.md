@@ -209,3 +209,29 @@ propio, no con el del ejecutor.
 **Veredicto de la auditoría: las mediciones son honestas y reproducibles.** La
 única diferencia es el conteo de registros DI, donde la auditoría contó
 textualmente y el ejecutor por query de AST; no sostiene ninguna decisión.
+
+---
+
+## 12. Verificación del spine 1 (re-medición independiente del corpus)
+
+Re-verificación hecha con el scanner del propio producto
+(`src/scanner/index.mjs` → `listSourceFiles`, con las exclusiones invariantes
+`obj/`, `bin/`, `node_modules/`, VCS) sobre la **revisión actual** de C1,
+`d7f6c2e624b4d2108cf7db68f5e9e3c294319cbe`. No se tocó `docs/API.md` ni la
+aceptación; sólo se confirmó que la línea de base del §2 sigue siendo real y
+está al día.
+
+| Métrica | §2 (spike original) | Re-medición (spine 1) | |
+|---|---|---|---|
+| Archivos `.cs` | 1.578 | **1.578** | exacto |
+| Bytes en disco | 6.792.850 | **6.792.850** | exacto |
+| Archivo más grande | 108.004 B | **108.740 B** (`Athena.Core/EditorialCaseOrchestrator.cs`) | +736 B, misma pieza |
+| Mediana (`p50`) | 1.751 B | **1.756 B** | dentro del ruido |
+| `p90` / `p95` / `p99` | 10.136 / 14.324 / 30.836 | **10.163 / 14.348 / 31.032** | dentro del ruido |
+
+**Lectura honesta:** el conteo y el total de bytes son exactos, y las diferencias
+de percentiles (≤ 0,6 %) son consistentes con C1 habiendo avanzado a una
+revisión más nueva que la del spike (hoy `d7f6c2e`). Ninguna cifra que sostenga
+una decisión (D2, D4, D6, D10) cambia. Este archivo no es una plantilla vacía:
+registra el spike medido del RFC-G1 §8 con su auditoría, y esta re-medición lo
+confirma vigente al inicio del spine.

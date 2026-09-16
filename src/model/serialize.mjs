@@ -98,3 +98,12 @@ export function graphCanonicalForm({ nodes = [], edges = [] } = {}) {
 export function graphCanonicalHash(graph) {
   return canonicalHash(graphCanonicalForm(graph));
 }
+
+/**
+ * Stable JSON of a whole graph: nodes and edges ordered by id, operational
+ * metadata stripped. Two builds of the same revision produce byte-identical
+ * output regardless of insertion order or key order (docs/API.md rule 7).
+ */
+export function graphCanonicalString(graph) {
+  return JSON.stringify(graphCanonicalForm(graph));
+}

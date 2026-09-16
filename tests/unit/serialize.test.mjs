@@ -3,6 +3,8 @@ import {
   canonicalForm,
   canonicalString,
   canonicalHash,
+  graphCanonicalForm,
+  graphCanonicalString,
   graphCanonicalHash,
   sortNodes,
   sortEdges,
@@ -95,5 +97,55 @@ describe("hash canónico del grafo", () => {
     const n2 = sortNodes([...nodes].reverse());
     expect(n1.map((n) => n.id)).toEqual(n2.map((n) => n.id));
     expect(sortEdges(edges).map((e) => e.id)).toEqual(sortEdges([...edges].reverse()).map((e) => e.id));
+  });
+});
+
+describe("orden de nodos y edges en el canon (contrato A5/A6)", () => {
+  const ids = ["class:A", "class:B", "class:C"].map((k) => makeNodeId("class", k.split(":")[1]));
+  const makeGraph = (order) => {
+    const g = new Graph({ rev: REV });
+    for (const k of order) g.upsertNode(createNode({ kind: "class", name: k, rev: REV }));
+    g.upsertEdge(makeEdge(ids[0], ids[1], "a.cs", 1));
+    g.upsertEdge(makeEdge(ids[2], ids[0], "b.cs", 2));
+    return g;
+  };
+  const asForm = (g) => ({ nodes: g.nodes(), edges: g.edges() });
+
+  it("emite los nodos ordenados por id, no por inserción", () => {
+    const form = graphCanonicalForm(asForm(makeGraph(["C", "A", "B"])));
+    const emitted = form.nodes.map((n) => n.id);
+    expect(emitted).toEqual([...emitted].sort());
+    expect(emitted).toEqual([ids[0], ids[1], ids[2]].sort());
+  });
+
+  it("emite los edges ordenados por id, no por inserción", () => {
+    const form = graphCanonicalForm(asForm(makeGraph(["A"])));
+    const emitted = form.edges.map((e) => e.id);
+    expect(emitted).toEqual([...emitted].sort());
+    // ids de edge derivados del contenido, estables e independientes del orden
+    expect(form.edges[0].evidence.file).toBe("a.cs");
+  });
+
+  it("el JSON canónico del grafo es byte-idéntico bajo distinto orden de inserción", () => {
+    expect(graphCanonicalString(asForm(makeGraph(["C", "A", "B"])))).toBe(
+      graphCanonicalString(asForm(makeGraph(["B", "C", "A"]))),
+    );
+  });
+
+  it("el JSON canónico es estable entre dos construcciones del mismo contenido", () => {
+    const a = graphCanonicalString(asForm(makeGraph(["A", "B", "C"])));
+    const b = graphCanonicalString(asForm(makeGraph(["A", "B", "C"])));
+    expect(a).toBe(b);
+    expect(graphCanonicalHash(asForm(makeGraph(["A", "B", "C"])))).toBe(
+      canonicalHash(JSON.parse(a)),
+    );
+  });
+
+  it("un cambio semántico altera el JSON canónico", () => {
+    const base = makeGraph(["A", "B", "C"]);
+    base.upsertNode(createNode({ kind: "class", name: "D", rev: REV }));
+    expect(graphCanonicalString(asForm(base))).not.toBe(
+      graphCanonicalString(asForm(makeGraph(["A", "B", "C"]))),
+    );
   });
 });
