@@ -2,7 +2,7 @@
 //
 // In a contract-first repository the API client is produced by a generator
 // (NSwag, openapi-generator) and is frequently NOT committed to the tree — the
-// real shape of CleanArchitecture and lubesoft per their ADR-0004. The evidence
+// real shape of CleanArchitecture per their ADR-0004. The evidence
 // for the API<->UI chain therefore cannot depend on reading the client: it must
 // be recoverable from the generator configuration (nswag.json) and the source
 // OpenAPI document (acceptance J2/J3, RFC-G1 v3 §6·J).
