@@ -2,6 +2,7 @@
 // gives Workspace a single hook to run every applicable analyzer over a scan.
 import { analyzeCSharp } from "./csharp/index.mjs";
 import { analyzeTypeScript } from "./typescript/index.mjs";
+import { analyzeContracts } from "./contracts/index.mjs";
 
 export const ANALYZERS = Object.freeze([
   {
@@ -13,6 +14,11 @@ export const ANALYZERS = Object.freeze([
     name: "typescript",
     extensions: [".ts", ".mts", ".cts", ".tsx"],
     analyze: analyzeTypeScript,
+  },
+  {
+    name: "contracts",
+    extensions: [".json"],
+    analyze: analyzeContracts,
   },
 ]);
 

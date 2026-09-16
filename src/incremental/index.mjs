@@ -37,6 +37,7 @@ import { resolveBindingRules } from "../resolve/index.mjs";
 import { scanRepository } from "../scanner/index.mjs";
 import { createCSharpAnalyzer } from "../analyzers/csharp/index.mjs";
 import { createTypeScriptAnalyzer } from "../analyzers/typescript/index.mjs";
+import { analyzeContracts } from "../analyzers/contracts/index.mjs";
 import { mergeNodes } from "../analyzers/csharp/extract.mjs";
 
 export const INCREMENTAL = "incremental";
@@ -47,6 +48,7 @@ export const FILE_EXTRACTOR_VERSION = "0.1.0";
 
 const CS_RE = /\.cs$/i;
 const TS_RE = /\.(ts|mts|cts|tsx)$/i;
+const JSON_RE = /\.json$/i;
 
 /**
  * `git diff --name-status -M` between two revisions, parsed into entries and
@@ -266,10 +268,24 @@ function primaryLocation(fragments) {
  */
 export function applyRegion(
   store,
-  { repoId, region, newRev, csNodes, csEdges, ruleNodes, ruleEdges, tsEdges, newFiles, scan } = {},
+  {
+    repoId,
+    region,
+    newRev,
+    csNodes,
+    csEdges,
+    ruleNodes,
+    ruleEdges,
+    tsEdges,
+    contractNodes,
+    newFiles,
+    scan,
+  } = {},
 ) {
   const reExtracted = new Map();
-  for (const node of [...csNodes, ...ruleNodes]) reExtracted.set(node.id, node);
+  for (const node of [...csNodes, ...ruleNodes, ...(contractNodes ?? [])]) {
+    reExtracted.set(node.id, node);
+  }
   const freshEdges = new Map();
   for (const edge of [...csEdges, ...ruleEdges, ...tsEdges]) freshEdges.set(edge.id, edge);
 
@@ -469,9 +485,19 @@ export async function updateRepository(store, repo, { from, to } = {}) {
   const ruleNodes = resolution.nodes;
   const ruleEdges = resolution.edges;
 
+  // Contract files in the region: a changed OpenAPI spec re-derives its
+  // endpoint nodes (acceptance J1), exactly like the C# region re-derives its
+  // own. The nodes flow into applyRegion so stale contract routes drop.
+  const contractNodes = [];
+  const contractFiles = regionFiles.filter((f) => JSON_RE.test(f));
+  for (const file of contractFiles) {
+    const out = await analyzeContracts({ files: [file], root, rev: newRev });
+    contractNodes.push(...out.nodes);
+  }
+
   // Routes: the region's re-derived endpoints replace the store's stale ones, so
   // UI calls relink against what actually exists (E2/E7).
-  const routes = computeRoutes(store, region, mergedCsNodes);
+  const routes = computeRoutes(store, region, [...mergedCsNodes, ...contractNodes]);
 
   const tsFiles = regionFiles.filter((f) => TS_RE.test(f));
   for (const file of tsFiles) {
@@ -490,6 +516,7 @@ export async function updateRepository(store, repo, { from, to } = {}) {
     ruleNodes,
     ruleEdges,
     tsEdges,
+    contractNodes,
     newFiles,
     scan,
   });
