@@ -1,12 +1,18 @@
 // Analyzer registry (spine step 3): maps file extensions to analyzers and
 // gives Workspace a single hook to run every applicable analyzer over a scan.
 import { analyzeCSharp } from "./csharp/index.mjs";
+import { analyzeTypeScript } from "./typescript/index.mjs";
 
 export const ANALYZERS = Object.freeze([
   {
     name: "csharp",
     extensions: [".cs"],
     analyze: analyzeCSharp,
+  },
+  {
+    name: "typescript",
+    extensions: [".ts", ".mts", ".cts", ".tsx"],
+    analyze: analyzeTypeScript,
   },
 ]);
 
