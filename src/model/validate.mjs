@@ -32,6 +32,12 @@ function validateEvidence(evidence, { required }) {
   }
   if (evidence.lineEnd !== undefined && !isPositiveInt(evidence.lineEnd)) {
     errors.push("evidence.lineEnd must be a positive integer");
+  } else if (
+    evidence.lineEnd !== undefined &&
+    isPositiveInt(evidence.lineStart) &&
+    evidence.lineEnd < evidence.lineStart
+  ) {
+    errors.push("evidence.lineEnd must be >= evidence.lineStart");
   }
   if (!isNonEmptyString(evidence.rev)) errors.push("evidence.rev is required");
   return errors;
@@ -115,6 +121,34 @@ export function assertValidEdge(edge) {
     throw new TypeError(`invalid edge ${edge && edge.id ? edge.id : "<anonymous>"}: ${errors.join("; ")}`);
   }
   return edge;
+}
+
+export function validateRevision(revision) {
+  const errors = [];
+  if (revision === null || typeof revision !== "object") {
+    return ["revision must be an object"];
+  }
+  if (!isNonEmptyString(revision.sha)) errors.push("revision.sha is required");
+  if (revision.parent !== undefined && !isNonEmptyString(revision.parent)) {
+    errors.push("revision.parent must be a non-empty string");
+  }
+  if (revision.at !== undefined && !isNonEmptyString(revision.at)) {
+    errors.push("revision.at must be a non-empty string");
+  }
+  if (revision.summary !== undefined && !isNonEmptyString(revision.summary)) {
+    errors.push("revision.summary must be a non-empty string");
+  }
+  return errors;
+}
+
+export function assertValidRevision(revision) {
+  const errors = validateRevision(revision);
+  if (errors.length > 0) {
+    throw new TypeError(
+      `invalid revision ${revision && revision.sha ? revision.sha : "<anonymous>"}: ${errors.join("; ")}`,
+    );
+  }
+  return revision;
 }
 
 /** Validate a whole graph; returns every violation instead of stopping at one. */

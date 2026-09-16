@@ -8,8 +8,9 @@ import { createHash } from "node:crypto";
 
 /**
  * Operational metadata: recorded for humans and health checks, but forbidden
- * from the canonical hash. Timestamps and durations are the obvious members;
- * the whole `metadata` bag is operational by construction.
+ * from the canonical hash. Timestamps and durations are the obvious members
+ * (`at` is the commit timestamp on a Revision); the whole `metadata` bag is
+ * operational by construction.
  */
 export const OPERATIONAL_KEYS = Object.freeze(
   new Set([
@@ -20,6 +21,7 @@ export const OPERATIONAL_KEYS = Object.freeze(
     "generatedAt",
     "startedAt",
     "finishedAt",
+    "at",
     "durationMs",
     "elapsedMs",
     "duration",
@@ -41,7 +43,13 @@ function compareCanonical(a, b) {
  */
 export function canonicalForm(value) {
   if (Array.isArray(value)) {
-    return value.map(canonicalForm).sort(compareCanonical);
+    // `undefined` carries no information and is dropped from objects, so it is
+    // dropped from arrays too: a sparse slot must not become `null` and flip a
+    // hash between two otherwise identical builds.
+    return value
+      .map(canonicalForm)
+      .filter((v) => v !== undefined)
+      .sort(compareCanonical);
   }
   if (value !== null && typeof value === "object") {
     const out = {};

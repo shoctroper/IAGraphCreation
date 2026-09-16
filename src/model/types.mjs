@@ -108,6 +108,16 @@ export function createEvidence({ file, lineStart, lineEnd, rev } = {}) {
   if (!Number.isInteger(lineStart) || lineStart < 1) {
     throw new TypeError("evidence.lineStart must be a positive integer");
   }
+  if (lineEnd !== undefined && (!Number.isInteger(lineEnd) || lineEnd < lineStart)) {
+    throw new TypeError("evidence.lineEnd must be an integer >= lineStart");
+  }
+  // A rev that IS supplied must be a real revision: builders must produce
+  // evidence that validates as-is. Omitting `rev` stays legal so nodes/edges
+  // can backfill it from their own revision (rule 5), but a wrong type or an
+  // empty string would make every downstream invariant fail.
+  if (rev !== undefined && (typeof rev !== "string" || rev.length === 0)) {
+    throw new TypeError("evidence.rev must be a non-empty string when provided");
+  }
   const ev = { file: toPosixPath(file), lineStart, rev };
   if (Number.isInteger(lineEnd)) ev.lineEnd = lineEnd;
   return ev;
@@ -173,9 +183,15 @@ export function createNode(input = {}) {
   if (metadata !== undefined) node.metadata = metadata;
 
   // Nodes record every place they were observed: a partial class keeps the
-  // evidence of both fragments (acceptance B6).
+  // evidence of both fragments (acceptance B6). Evidence without a revision is
+  // a defect: the node's own revision is backfilled so every fragment stays
+  // traceable to the revision it was observed at (rule 5).
   if (evidence !== undefined) {
-    node.evidence = evidence.map((e) => createEvidence(e));
+    node.evidence = evidence.map((e) => {
+      const ev = createEvidence(e);
+      if (!ev.rev) ev.rev = first;
+      return ev;
+    });
   } else if (file !== undefined && Number.isInteger(lineStart)) {
     node.evidence = [createEvidence({ file, lineStart, lineEnd, rev: first })];
   }
@@ -257,4 +273,22 @@ export function withRevision(node, rev) {
     lastSeenRev: rev,
     firstSeenRev: node.firstSeenRev ?? rev,
   };
+}
+
+/**
+ * A revision as first-class metadata: the git identity a graph was observed at.
+ * `sha` is the semantic identity and the only required field; `parent` records
+ * lineage and `summary` a human-readable subject. `at` is the commit timestamp,
+ * which is operational and therefore excluded from the canonical form
+ * (docs/API.md rule 7: timestamps never enter the canonical hash).
+ */
+export function createRevision({ sha, parent, at, summary } = {}) {
+  if (typeof sha !== "string" || sha.length === 0) {
+    throw new TypeError("revision.sha is required");
+  }
+  const revision = { sha };
+  if (typeof parent === "string" && parent.length > 0) revision.parent = parent;
+  if (typeof at === "string" && at.length > 0) revision.at = at;
+  if (typeof summary === "string" && summary.length > 0) revision.summary = summary;
+  return revision;
 }
