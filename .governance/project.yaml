@@ -34,10 +34,25 @@ scope:
   - package-lock.json
 acceptance:
   tests:
-    command: npx vitest run --reporter=dot
+    # GOV runs this gate in a THROWAWAY git worktree, which by design has no
+    # node_modules: a Python project works there because pytest needs no
+    # install, a Node one does not. Installing first is what makes the gate
+    # meaningful instead of red from the start. Measured at ~2s with a warm
+    # npm cache.
+    command: npm ci --no-audit --no-fund --prefer-offline --silent && npx vitest run --reporter=dot
     timeout: 1800.0
     junit: false
-  artifacts: []
+  artifacts:
+    required:
+    # The artifacts gate is REQUIRED, and a required gate that is SKIPPED
+    # escalates to a Human Gate. Declaring nothing is therefore not neutral -
+    # it halts every attempt. These two are real invariants, not gate filler:
+    # docs/API.md is the frozen contract the acceptance binds to and is denied
+    # to the implementer, so the gate proves it survived the attempt intact.
+    - path: docs/API.md
+      kind: file
+    - path: README.md
+      kind: file
 providers:
   IMPLEMENTER:
     provider: opencode

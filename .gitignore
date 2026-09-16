@@ -6,3 +6,12 @@ graphs/
 *.db-shm
 coverage/
 .DS_Store
+
+# GOV runtime state (the contract .governance/project.yaml stays tracked)
+.governance/goals/
+.governance/runs/
+.governance/*.lock
+.governance/git-baseline.json
+.governance/baseline.json
+.governance/repository-identity.json
+.governance/current.json
