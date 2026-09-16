@@ -1,0 +1,49 @@
+schema_version: '1'
+project: iagraphcreation
+governance_version: 1.0.0
+task_type: CODE
+policy_version: 1
+objective: >-
+  Build IAGraphCreation: a canonical, traceable, revision-aware code and
+  architecture graph of related repositories, with Copilot context and a local
+  interactive viewer, without depending on Graphify or Archify at runtime.
+  Design: MarioGovernance/docs/milestones/G1-IAGRAPH/RFC-G1.md (v3, ratified).
+scope:
+  allow:
+  - src
+  - tests/unit
+  - tests/fixtures
+  - docs/ARCHITECTURE.md
+  - docs/MEASUREMENTS.md
+  - README.md
+  - package.json
+  - vitest.config.mjs
+  deny:
+  # The pinned acceptance is the outcome, not material for the implementer.
+  # This is the R-T2-1 hole B0 left open: an attempt with tests/ in its envelope
+  # could weaken the assertions it is measured by.
+  - tests/acceptance
+  - vendor
+  - .governance
+  - LICENSE
+  - docs/API.md
+  ignore:
+  - node_modules
+  - .iagraph
+  - graphs
+  - package-lock.json
+acceptance:
+  tests:
+    command: npx vitest run --reporter=dot
+    timeout: 1800.0
+    junit: false
+  artifacts: []
+providers:
+  IMPLEMENTER:
+    provider: opencode
+    model: opencode-go/deepseek-v4-flash
+    timeout_seconds: 3000
+  QA:
+    provider: opencode
+    model: opencode-go/deepseek-v4-flash
+    timeout_seconds: 1200

@@ -1,0 +1,17 @@
+{
+  "name": "iagraph",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Canonical, traceable, incrementally-updatable code and architecture graph for related repositories, with Copilot context and a local interactive viewer",
+  "license": "MIT",
+  "bin": { "iagraph": "./src/cli/iagraph.mjs" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "vitest run",
+    "test:acceptance": "vitest run tests/acceptance",
+    "test:watch": "vitest"
+  },
+  "devDependencies": { "vitest": "^3.2.4" },
+  "dependencies": { "web-tree-sitter": "0.27.0" }
+}
