@@ -278,6 +278,7 @@ export function applyRegion(
     ruleEdges,
     tsEdges,
     contractNodes,
+    contractEdges,
     newFiles,
     scan,
   } = {},
@@ -287,7 +288,9 @@ export function applyRegion(
     reExtracted.set(node.id, node);
   }
   const freshEdges = new Map();
-  for (const edge of [...csEdges, ...ruleEdges, ...tsEdges]) freshEdges.set(edge.id, edge);
+  for (const edge of [...csEdges, ...ruleEdges, ...tsEdges, ...(contractEdges ?? [])]) {
+    freshEdges.set(edge.id, edge);
+  }
 
   // ---- nodes -------------------------------------------------------------
   const nodeUpserts = [];
@@ -486,13 +489,17 @@ export async function updateRepository(store, repo, { from, to } = {}) {
   const ruleEdges = resolution.edges;
 
   // Contract files in the region: a changed OpenAPI spec re-derives its
-  // endpoint nodes (acceptance J1), exactly like the C# region re-derives its
-  // own. The nodes flow into applyRegion so stale contract routes drop.
+  // endpoint nodes (acceptance J1) and a changed generator config re-derives
+  // its `generated_from` edges (acceptance J2), exactly like the C# region
+  // re-derives its own. The nodes and edges flow into applyRegion so stale
+  // contract routes and generator edges drop.
   const contractNodes = [];
+  const contractEdges = [];
   const contractFiles = regionFiles.filter((f) => JSON_RE.test(f));
   for (const file of contractFiles) {
     const out = await analyzeContracts({ files: [file], root, rev: newRev });
     contractNodes.push(...out.nodes);
+    contractEdges.push(...(out.edges ?? []));
   }
 
   // Routes: the region's re-derived endpoints replace the store's stale ones, so
@@ -517,6 +524,7 @@ export async function updateRepository(store, repo, { from, to } = {}) {
     ruleEdges,
     tsEdges,
     contractNodes,
+    contractEdges,
     newFiles,
     scan,
   });

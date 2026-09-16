@@ -293,3 +293,64 @@ public interface IOrderService { Order[] All(); }
     }
   }, 60_000);
 });
+
+describe("Workspace · update incremental con configuración de generador (J2)", () => {
+  const FILES = {
+    "api/Orders.cs": `using Microsoft.AspNetCore.Builder;
+namespace Shop.Api;
+
+public static class Orders
+{
+    public static void Map(WebApplication app)
+    {
+        app.MapGet("/api/orders", (IOrderService svc) => svc.All());
+    }
+}
+
+public interface IOrderService { Order[] All(); }
+`,
+  };
+
+  const CONFIG = JSON.stringify({
+    documentGenerator: { fromDocument: { url: "contracts/shop.v1.json" } },
+    codeGenerators: { openApiToTypeScriptClient: { output: "ui/api-client.ts" } },
+  }, null, 2);
+
+  it("committear nswag.json hace que el store rinda su edge generated_from (J2)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "iagraph-contract-gen-update-"));
+    try {
+      for (const [rel, body] of Object.entries(FILES)) {
+        const abs = join(dir, rel);
+        mkdirSync(dirname(abs), { recursive: true });
+        writeFileSync(abs, body, "utf8");
+      }
+      git(dir, "init", "-q", "-b", "main");
+      git(dir, "config", "user.email", "u@u");
+      git(dir, "config", "user.name", "u");
+      git(dir, "add", "-A");
+      git(dir, "commit", "-qm", "base");
+
+      const ws = await createWorkspace(dir, { storePath: ":memory:" });
+      await ws.addRepo({ path: dir, role: "api" });
+      await ws.build();
+
+      expect(await ws.store.getEdges({ kind: "generated_from" })).toEqual([]);
+
+      writeFileSync(join(dir, "nswag.json"), CONFIG, "utf8");
+      const from = git(dir, "rev-parse", "HEAD").trim();
+      git(dir, "add", "-A");
+      git(dir, "commit", "-qm", "add generator config");
+
+      const rep = await ws.update({ from });
+      const g = await ws.store.getEdges({ kind: "generated_from" });
+      expect(g.length).toBeGreaterThan(0);
+      expect(g[0].evidence.file).toContain("nswag.json");
+      expect(g[0].src).toBe("client:ui/api-client.ts");
+      expect(g[0].dst).toBe("file:contracts/shop.v1.json");
+      expect(rep.reanalyzedFiles).toContain("nswag.json");
+      expect(rep.degradedToRebuild).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
