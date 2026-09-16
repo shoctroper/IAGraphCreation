@@ -42,17 +42,16 @@ acceptance:
     command: npm ci --no-audit --no-fund --prefer-offline --silent && npx vitest run --reporter=dot
     timeout: 1800.0
     junit: false
+  # The artifacts gate is REQUIRED, and a required gate that is SKIPPED
+  # escalates to a Human Gate. Declaring an empty list is therefore not
+  # neutral - it halts every attempt. These two are real invariants, not gate
+  # filler: docs/API.md is the frozen contract the acceptance binds to and is
+  # denied to the implementer, so the gate proves it survived intact.
   artifacts:
-    required:
-    # The artifacts gate is REQUIRED, and a required gate that is SKIPPED
-    # escalates to a Human Gate. Declaring nothing is therefore not neutral -
-    # it halts every attempt. These two are real invariants, not gate filler:
-    # docs/API.md is the frozen contract the acceptance binds to and is denied
-    # to the implementer, so the gate proves it survived the attempt intact.
-    - path: docs/API.md
-      kind: file
-    - path: README.md
-      kind: file
+  - path: docs/API.md
+    kind: file
+  - path: README.md
+    kind: file
 providers:
   IMPLEMENTER:
     provider: opencode

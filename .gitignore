@@ -16,3 +16,4 @@ coverage/
 .governance/repository-identity.json
 .governance/current.json
 .governance/lock
+.governance/last-rebaseline.json
