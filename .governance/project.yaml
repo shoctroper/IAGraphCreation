@@ -29,6 +29,8 @@ scope:
   - docs/API.md
   # An agent must not be able to widen its own tool permissions.
   - opencode.json
+  # the acceptance runs under its own config; softening it would soften the outcome
+  - vitest.acceptance.mjs
   - docs/reference
   ignore:
   - node_modules

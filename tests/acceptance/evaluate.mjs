@@ -15,9 +15,13 @@ const ROOT = new URL("../../", import.meta.url).pathname;
 const TOTAL = 62;
 const report = join(tmpdir(), `iagraph-acceptance-${process.pid}.json`);
 
+// The acceptance suite runs under its own config: the default one restricts
+// `include` to tests/unit, which made this evaluator match zero files and
+// report a blameless 0/62 for several attempts. See the collection guard below.
 const run = spawnSync(
   "npx",
-  ["vitest", "run", "tests/acceptance", "--reporter=json", `--outputFile=${report}`],
+  ["vitest", "run", "--config", "vitest.acceptance.mjs",
+   "--reporter=json", `--outputFile=${report}`],
   { cwd: ROOT, encoding: "utf8", timeout: 3_600_000, stdio: ["ignore", "pipe", "pipe"] },
 );
 
@@ -47,9 +51,26 @@ if (existsSync(report)) {
   failing.push({ case: "<suite did not run>", status: why.slice(0, 400) });
 }
 
+// Collection guard. A run that collects fewer cases than the pinned total is
+// NOT a result of zero: it means the suite did not run as intended, and
+// reporting a calm 0 hides that from the Goal. This happened for real - a
+// config change made the filter match no files, and several attempts were
+// evaluated against silence. An evaluator that cannot see its own cases must
+// say so loudly rather than blame the implementation.
+const collected = passing + failing.length;
+if (collected < TOTAL) {
+  failing.unshift({
+    case: "<evaluator collected %d of %d cases>".replace("%d", collected).replace("%d", TOTAL),
+    status: "COLLECTION_INCOMPLETE — the acceptance suite did not run in full; "
+          + "progress below is not trustworthy",
+  });
+  passing = 0;
+}
+
 console.log(JSON.stringify({
   iagraph_acceptance_passing: passing,
   progress: passing,
   total: TOTAL,
+  collected,
   failing: failing.slice(0, 25),
 }));
