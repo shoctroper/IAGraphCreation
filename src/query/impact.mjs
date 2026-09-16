@@ -7,6 +7,10 @@
 //   { kind }                             todos los nodos de un kind
 //
 // Sólo devuelve nodos presentes en el store; ningún resultado se fabrica.
+// La salida es determinista: nodos y edges ordenados por id (regla de
+// determinismo de la consulta), nunca por orden de inserción.
+
+import { sortNodes, sortEdges } from "../model/index.mjs";
 
 function impactOnFile(store, file) {
   const nodes = store.findNodes({ file });
@@ -60,22 +64,21 @@ function impactOnKind(store, kind) {
 export async function impact(workspace, target) {
   const store = workspace.store;
 
+  let result;
   if (typeof target === "string") {
     const node = store.getNode(target);
-    if (node) return impactOnNode(store, node);
-    return impactOnFile(store, target);
-  }
-
-  if (target && typeof target === "object") {
-    if (target.withoutConsumers) return impactOrphans(store, target);
-    if (typeof target.file === "string") return impactOnFile(store, target.file);
-    if (typeof target.nodeId === "string") {
+    result = node ? impactOnNode(store, node) : impactOnFile(store, target);
+  } else if (target && typeof target === "object") {
+    if (target.withoutConsumers) result = impactOrphans(store, target);
+    else if (typeof target.file === "string") result = impactOnFile(store, target.file);
+    else if (typeof target.nodeId === "string") {
       const node = store.getNode(target.nodeId);
-      if (node) return impactOnNode(store, node);
-      return { nodes: [], edges: [], reason: `nodo no encontrado: ${target.nodeId}` };
-    }
-    if (typeof target.kind === "string") return impactOnKind(store, target.kind);
+      result = node
+        ? impactOnNode(store, node)
+        : { nodes: [], edges: [], reason: `nodo no encontrado: ${target.nodeId}` };
+    } else if (typeof target.kind === "string") result = impactOnKind(store, target.kind);
   }
 
-  return { nodes: [], edges: [], reason: "impact: objetivo desconocido" };
+  if (!result) result = { nodes: [], edges: [], reason: "impact: objetivo desconocido" };
+  return { ...result, nodes: sortNodes(result.nodes), edges: sortEdges(result.edges) };
 }

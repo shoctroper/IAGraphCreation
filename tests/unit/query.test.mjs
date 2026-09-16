@@ -74,6 +74,23 @@ describe("D1 · search encuentra dónde vive una funcionalidad", () => {
     const b = await search(ws, "order");
     expect(b.map((h) => h.node.id)).toEqual(a.map((h) => h.node.id));
   });
+
+  it("la búsqueda es insensible a mayúsculas y encuentra por nombre cualificado", async () => {
+    const upper = await search(ws, "ORDERS");
+    const lower = await search(ws, "orders");
+    expect(upper.map((h) => h.node.id)).toEqual(lower.map((h) => h.node.id));
+    const byQualified = await search(ws, "Fixture.Api.Orders");
+    expect(byQualified[0].node.id).toBe("class:Fixture.Api.Orders");
+    expect(byQualified[0].score).toBe(950);
+  });
+
+  it("los aciertos traen evidencia rastreable a un archivo real del fixture", async () => {
+    for (const hit of await search(ws, "order")) {
+      expect(hit.evidence?.file).toBeTruthy();
+      expect(hit.evidence?.lineStart).toBeGreaterThan(0);
+      expect(hit.evidence?.rev).toBe(rev);
+    }
+  });
 });
 
 describe("D2 · explain devuelve entrantes, salientes y evidencia", () => {
@@ -129,10 +146,72 @@ describe("D3 · path conecta dos nodos y cada salto cita su evidencia", () => {
     }
   });
 
+  it("el camino se navega en ambos sentidos: de la interfaz al endpoint también", async () => {
+    const ep = ws.store.findNodes({ kind: "endpoint" })[0];
+    const svc = ws.store.findNodes({ kind: "interface" })[0];
+    const r = await path(ws, svc.id, ep.id);
+    expect(r.found).toBe(true);
+    expect(r.hops.length).toBeGreaterThan(0);
+    expect(r.hops.every((h) => h.evidence?.file && h.evidence?.lineStart > 0)).toBe(true);
+  });
+
   it("devuelve found=false cuando un extremo no existe y hops vacío cuando es el mismo nodo", async () => {
     const iface = ws.store.findNodes({ kind: "interface" })[0];
     expect(await path(ws, "class:NoExiste", iface.id)).toEqual({ found: false, hops: [] });
     expect(await path(ws, iface.id, iface.id)).toEqual({ found: true, hops: [] });
+  });
+});
+
+describe("D2-rev · las respuestas conocen la revisión del store (regla 5)", () => {
+  it("todo nodo devuelto por search, explain e impact lleva firstSeenRev/lastSeenRev", async () => {
+    const stamp = (n) => {
+      expect(n.firstSeenRev, `${n.id} sin firstSeenRev`).toBe(rev);
+      expect(n.lastSeenRev, `${n.id} sin lastSeenRev`).toBe(rev);
+    };
+    for (const hit of await search(ws, "order")) stamp(hit.node);
+    const iface = ws.store.findNodes({ kind: "interface" })[0];
+    stamp((await explain(ws, iface.id)).node);
+    for (const n of (await impact(ws, { file: "api/Orders.cs" })).nodes) stamp(n);
+  });
+
+  it("todo edge devuelto por explain, path e impact cita observedInRev y evidencia con rev", async () => {
+    const stamp = (e) => {
+      expect(e.observedInRev, `${e.id} sin observedInRev`).toBe(rev);
+      expect(e.evidence?.rev, `${e.id} sin evidencia con rev`).toBe(rev);
+    };
+    const iface = ws.store.findNodes({ kind: "interface" })[0];
+    const ex = await explain(ws, iface.id);
+    for (const e of [...ex.incoming, ...ex.outgoing]) stamp(e);
+    const ep = ws.store.findNodes({ kind: "endpoint" })[0];
+    for (const h of (await path(ws, ep.id, iface.id)).hops) stamp(h.edge);
+    for (const e of (await impact(ws, { file: "api/Orders.cs" })).edges) stamp(e);
+  });
+});
+
+describe("det · la consulta es determinista: misma entrada, misma salida", () => {
+  it("explain devuelve byte a byte la misma respuesta", async () => {
+    const iface = ws.store.findNodes({ kind: "interface" })[0];
+    const a = JSON.stringify(await explain(ws, iface.id));
+    const b = JSON.stringify(await explain(ws, iface.id));
+    expect(b).toBe(a);
+  });
+
+  it("path devuelve la misma secuencia de saltos", async () => {
+    const ep = ws.store.findNodes({ kind: "endpoint" })[0];
+    const svc = ws.store.findNodes({ kind: "interface" })[0];
+    const hops = (r) => r.hops.map((h) => h.edge.id);
+    expect(hops(await path(ws, ep.id, svc.id))).toEqual(hops(await path(ws, ep.id, svc.id)));
+  });
+
+  it("impact devuelve los mismos nodos y edges, ordenados por id", async () => {
+    const a = await impact(ws, { file: "api/Orders.cs" });
+    const b = await impact(ws, { file: "api/Orders.cs" });
+    expect(b.nodes.map((n) => n.id)).toEqual(a.nodes.map((n) => n.id));
+    expect(b.edges.map((e) => e.id)).toEqual(a.edges.map((e) => e.id));
+    const sortedNodes = [...a.nodes].map((n) => n.id).sort();
+    const sortedEdges = [...a.edges].map((e) => e.id).sort();
+    expect(a.nodes.map((n) => n.id)).toEqual(sortedNodes);
+    expect(a.edges.map((e) => e.id)).toEqual(sortedEdges);
   });
 });
 
@@ -186,6 +265,37 @@ describe("D5 · la consulta nunca devuelve un nodo que no esté en el store", ()
     for (const n of imp.nodes) expect(ws.store.getNode(n.id)).toBeTruthy();
     const ex = await explain(ws, ws.store.findNodes({ kind: "interface" })[0].id);
     expect(ws.store.getNode(ex.node.id)).toBeTruthy();
+  });
+
+  it("ninguna consulta referencia un nodo que no esté en el store (barrido D5)", async () => {
+    const ids = new Set((await ws.store.findNodes({})).map((n) => n.id));
+    const check = (id, from) =>
+      expect(ids.has(id), `nodo ${id} no está en el store (${from})`).toBe(true);
+
+    for (const hit of await search(ws, "order")) check(hit.node.id, "search");
+
+    const iface = ws.store.findNodes({ kind: "interface" })[0];
+    const ex = await explain(ws, iface.id);
+    check(ex.node.id, "explain.node");
+    for (const e of [...ex.incoming, ...ex.outgoing]) {
+      check(e.src, "explain.edge.src");
+      check(e.dst, "explain.edge.dst");
+    }
+
+    const ep = ws.store.findNodes({ kind: "endpoint" })[0];
+    for (const h of (await path(ws, ep.id, iface.id)).hops) {
+      check(h.edge.src, "path.edge.src");
+      check(h.edge.dst, "path.edge.dst");
+    }
+
+    for (const target of [{ file: "api/Orders.cs" }, { kind: "class" }]) {
+      const imp = await impact(ws, target);
+      for (const n of imp.nodes) check(n.id, `impact.node (${target.file ?? target.kind})`);
+      for (const e of imp.edges) {
+        check(e.src, "impact.edge.src");
+        check(e.dst, "impact.edge.dst");
+      }
+    }
   });
 });
 
